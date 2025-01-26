@@ -55,6 +55,6 @@ class CarDetailsDialog {
   static void shareCarDetails(LatLng position) {
     final String carLocation =
         'Car Location: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
-    print('Sharing: $carLocation');
+    print('Sharing_______________________________+++++: $carLocation');
   }
 }

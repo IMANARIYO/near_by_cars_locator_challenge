@@ -20,7 +20,7 @@ class _CarLocatorScreenState extends State<CarLocatorScreen> {
   // Initial camera position for the map centered on Kigali
   static final CameraPosition _initialPosition = CameraPosition(
     target: LatLng(-1.9403, 30.0601),
-    zoom: 14.4746,
+    zoom: 14.5,
   );
 
   final LocationService _locationService = LocationService();
@@ -56,57 +56,59 @@ class _CarLocatorScreenState extends State<CarLocatorScreen> {
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _addNearbyCarMarkers(); // Add car markers after map is created
-      _loadUserIcon(); // Load user location icon
-      _getCurrentLocation(); // Get user location
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.wait([
+        _loadUserIcon(),
+        _getCurrentLocation(),
+      ]);
+      _addNearbyCarMarkers();
     });
   }
 
   Future<void> _loadUserIcon() async {
-    _userIcon = await BitmapDescriptor.fromAssetImage(
-        ImageConfiguration(size: Size(48, 48)), 'assets/images/user_icon.png');
+    try {
+      _userIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(48, 48)),
+        'assets/images/user_icon.png',
+      );
+    } catch (e) {
+      print('Error loading user icon: $e');
+    }
   }
 
   Future<void> _getCurrentLocation() async {
     try {
-      // Request location permission before accessing the location
       LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          print('Location permissions are denied. Please allow access.');
+          print('Location permissions are denied.');
           return;
         }
       }
-      if (permission == LocationPermission.deniedForever) {
-        print('Location permissions are permanently denied.');
+
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        print('Location services are disabled. Please enable them.');
         return;
       }
 
-      // Get current user location from location service
       _userLocation = await _locationService.getCurrentLocation();
 
       if (_userLocation != null && _userIcon != null) {
         setState(() {
-          // Add user location marker
           _markerService.addCustomMarker(
             _userLocation!,
             'Your Location',
             _showCarDetails,
-            icon: _userIcon,
+            icon: _userIcon!,
           );
         });
 
-        // Animate camera to the new location
         final GoogleMapController controller = await _controller.future;
         await controller.animateCamera(
           CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: _userLocation!,
-              zoom: 14.4746,
-            ),
+            CameraPosition(target: _userLocation!, zoom: 14.5),
           ),
         );
       }
@@ -116,13 +118,18 @@ class _CarLocatorScreenState extends State<CarLocatorScreen> {
   }
 
   void _addNearbyCarMarkers() {
-    _carsByDistrict.forEach((district, carLocations) {
-      for (var car in carLocations) {
-        _markerService.addCustomMarker(car, 'Car in $district', _showCarDetails,
-            icon: _userIcon); // Pass the icon
-      }
+    setState(() {
+      _carsByDistrict.forEach((district, carLocations) {
+        for (var car in carLocations) {
+          _markerService.addCustomMarker(
+            car,
+            'Car in $district',
+            _showCarDetails,
+            iconPath: 'assets/images/carIcon.png',
+          );
+        }
+      });
     });
-    setState(() {});
   }
 
   void _showCarDetails(LatLng position) {
@@ -130,7 +137,7 @@ class _CarLocatorScreenState extends State<CarLocatorScreen> {
       context,
       position,
       CarDetailsDialog.shareCarDetails,
-      userLocation: _userLocation, // Pass user location
+      userLocation: _userLocation,
     );
   }
 
@@ -138,29 +145,33 @@ class _CarLocatorScreenState extends State<CarLocatorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: GoogleMap(
-        mapType: MapType.normal, // Set map type to terrain
-        initialCameraPosition: _initialPosition, // Set initial camera position
-        myLocationEnabled: true, // Show user's location on map
-        myLocationButtonEnabled: true, // Enable my location button
-        compassEnabled: true, // Enable compass for orientation
-        zoomControlsEnabled: true, // Enable zoom buttons
-        markers: _markerService.markers, // Add markers to map
-        polylines: _markerService.polylines, // Add polylines to map
+        mapType: MapType.normal,
+        initialCameraPosition: _initialPosition,
+        myLocationEnabled: true,
+        myLocationButtonEnabled: true,
+        compassEnabled: true,
+        zoomControlsEnabled: true,
+        markers: _markerService.markers,
+        polylines: _markerService.polylines,
         onMapCreated: (GoogleMapController controller) {
           if (!_controller.isCompleted) {
             _controller.complete(controller);
           }
         },
-        mapToolbarEnabled: true, // Enable map toolbar
+        mapToolbarEnabled: true,
         onTap: (LatLng position) {
-          _markerService.addCustomMarker(
-              position, 'New Marker', _showCarDetails,
-              icon: _userIcon); // Add icon for new marker
-          setState(() {});
+          setState(() {
+            _markerService.addCustomMarker(
+              position,
+              'New Marker',
+              _showCarDetails,
+              icon: _userIcon,
+            );
+          });
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _getCurrentLocation, // Get current location on click
+        onPressed: _getCurrentLocation,
         child: const Icon(Icons.my_location),
       ),
     );
